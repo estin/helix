@@ -2281,7 +2281,7 @@ fn buffer_picker(cx: &mut Context) {
         path: Option<PathBuf>,
         is_modified: bool,
         is_current: bool,
-        used_at: std::time::Instant,
+        focused_at: std::time::Instant,
     }
 
     impl ui::menu::Item for BufferMeta {
@@ -2319,7 +2319,7 @@ fn buffer_picker(cx: &mut Context) {
         path: doc.path().cloned(),
         is_modified: doc.is_modified(),
         is_current: doc.id() == current,
-        used_at: doc.used_at,
+        focused_at: doc.focused_at,
     };
 
     let mut items = cx
@@ -2329,8 +2329,8 @@ fn buffer_picker(cx: &mut Context) {
         .map(|(_, doc)| new_meta(doc))
         .collect::<Vec<BufferMeta>>();
 
-    // mru
-    items.sort_by(|a, b| b.used_at.cmp(&a.used_at));
+    // Sort so that most recently focused is on top
+    items.sort_unstable_by_key(|item| std::cmp::Reverse(item.focused_at));
 
     let picker = FilePicker::new(
         items,
