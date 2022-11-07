@@ -758,7 +758,7 @@ impl Document {
     }
 
     /// Mark document as recent used for MRU sorting
-    pub fn mark_as_used(&mut self) {
+    pub fn mark_as_focused(&mut self) {
         self.focused_at = std::time::Instant::now();
     }
 
