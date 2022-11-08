@@ -1233,7 +1233,7 @@ impl Editor {
             self.ensure_cursor_in_view(view_id);
         }
 
-        let view = self.tree.get_mut(view_id);
+        let view = view!(self, view_id);
         let doc = doc_mut!(self, &view.doc);
         doc.mark_as_focused();
     }
@@ -1250,7 +1250,7 @@ impl Editor {
             self.ensure_cursor_in_view(id);
         }
 
-        let view = self.tree.get_mut(id);
+        let view = view!(self, id);
         let doc = doc_mut!(self, &view.doc);
         doc.mark_as_focused();
     }
