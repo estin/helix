@@ -9,6 +9,7 @@ use crate::{
     tree::{self, Tree},
     Align, Document, DocumentId, View, ViewId,
 };
+use helix_vcs::DiffProviderRegistry;
 
 use futures_util::stream::select_all::SelectAll;
 use futures_util::{future, StreamExt};
@@ -26,7 +27,10 @@ use std::{
 };
 
 use tokio::{
-    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        Notify, RwLock,
+    },
     time::{sleep, Duration, Instant, Sleep},
 };
 
@@ -325,8 +329,14 @@ pub enum StatusLineElement {
     /// A summary of the number of errors and warnings
     Diagnostics,
 
+    /// A summary of the number of errors and warnings on file and workspace
+    WorkspaceDiagnostics,
+
     /// The number of selections (cursors)
     Selections,
+
+    /// The number of characters currently in primary selection
+    PrimarySelectionLength,
 
     /// The cursor position
     Position,
@@ -448,6 +458,8 @@ pub enum GutterType {
     LineNumbers,
     /// Show one blank space
     Spacer,
+    /// Highlight local changes
+    Diff,
 }
 
 impl std::str::FromStr for GutterType {
@@ -456,7 +468,9 @@ impl std::str::FromStr for GutterType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "diagnostics" => Ok(Self::Diagnostics),
+            "spacer" => Ok(Self::Spacer),
             "line-numbers" => Ok(Self::LineNumbers),
+            "diff" => Ok(Self::Diff),
             _ => anyhow::bail!("Gutter type can only be `diagnostics` or `line-numbers`."),
         }
     }
@@ -589,7 +603,13 @@ impl Default for Config {
             line_number: LineNumber::Absolute,
             cursorline: false,
             cursorcolumn: false,
-            gutters: vec![GutterType::Diagnostics, GutterType::LineNumbers],
+            gutters: vec![
+                GutterType::Diagnostics,
+                GutterType::Spacer,
+                GutterType::LineNumbers,
+                GutterType::Spacer,
+                GutterType::Diff,
+            ],
             middle_click_paste: true,
             auto_pairs: AutoPairConfig::default(),
             auto_completion: true,
@@ -670,6 +690,7 @@ pub struct Editor {
     pub macro_replaying: Vec<char>,
     pub language_servers: helix_lsp::Registry,
     pub diagnostics: BTreeMap<lsp::Url, Vec<lsp::Diagnostic>>,
+    pub diff_providers: DiffProviderRegistry,
 
     pub debugger: Option<dap::Client>,
     pub debugger_events: SelectAll<UnboundedReceiverStream<dap::Payload>>,
@@ -700,7 +721,14 @@ pub struct Editor {
     pub exit_code: i32,
 
     pub config_events: (UnboundedSender<ConfigEvent>, UnboundedReceiver<ConfigEvent>),
+    /// Allows asynchronous tasks to control the rendering
+    /// The `Notify` allows asynchronous tasks to request the editor to perform a redraw
+    /// The `RwLock` blocks the editor from performing the render until an exclusive lock can be aquired
+    pub redraw_handle: RedrawHandle,
+    pub needs_redraw: bool,
 }
+
+pub type RedrawHandle = (Arc<Notify>, Arc<RwLock<()>>);
 
 #[derive(Debug)]
 pub enum EditorEvent {
@@ -774,6 +802,7 @@ impl Editor {
             theme: theme_loader.default(),
             language_servers: helix_lsp::Registry::new(),
             diagnostics: BTreeMap::new(),
+            diff_providers: DiffProviderRegistry::default(),
             debugger: None,
             debugger_events: SelectAll::new(),
             breakpoints: HashMap::new(),
@@ -792,6 +821,8 @@ impl Editor {
             auto_pairs,
             exit_code: 0,
             config_events: unbounded_channel(),
+            redraw_handle: Default::default(),
+            needs_redraw: false,
         }
     }
 
@@ -948,7 +979,8 @@ impl Editor {
     fn _refresh(&mut self) {
         let config = self.config();
         for (view, _) in self.tree.views_mut() {
-            let doc = &self.documents[&view.doc];
+            let doc = doc_mut!(self, &view.doc);
+            view.sync_changes(doc);
             view.ensure_cursor_in_view(doc, config.scrolloff)
         }
     }
@@ -960,6 +992,7 @@ impl Editor {
 
         let doc = doc_mut!(self, &doc_id);
         doc.ensure_view_init(view.id);
+        view.sync_changes(doc);
         doc.mark_as_focused();
 
         align_view(doc, view, Align::Center);
@@ -1099,7 +1132,9 @@ impl Editor {
             let mut doc = Document::open(&path, None, Some(self.syn_loader.clone()))?;
 
             let _ = Self::launch_language_server(&mut self.language_servers, &mut doc);
-
+            if let Some(diff_base) = self.diff_providers.get_diff_base(&path) {
+                doc.set_diff_base(diff_base, self.redraw_handle.clone());
+            }
             self.new_document(doc)
         };
 
@@ -1108,9 +1143,10 @@ impl Editor {
     }
 
     pub fn close(&mut self, id: ViewId) {
-        let (_view, doc) = current!(self);
-        // remove selection
-        doc.remove_view(id);
+        // Remove selections for the closed view on all documents.
+        for doc in self.documents_mut() {
+            doc.remove_view(id);
+        }
         self.tree.remove(id);
         self._refresh();
     }
@@ -1184,6 +1220,7 @@ impl Editor {
             let view_id = self.tree.insert(view);
             let doc = doc_mut!(self, &doc_id);
             doc.ensure_view_init(view_id);
+            doc.mark_as_focused();
         }
 
         self._refresh();
@@ -1231,6 +1268,12 @@ impl Editor {
         if prev_id != view_id {
             self.mode = Mode::Normal;
             self.ensure_cursor_in_view(view_id);
+
+            // Update jumplist selections with new document changes.
+            for (view, _focused) in self.tree.views_mut() {
+                let doc = doc_mut!(self, &view.doc);
+                view.sync_changes(doc);
+            }
         }
 
         let view = view!(self, view_id);
@@ -1239,20 +1282,7 @@ impl Editor {
     }
 
     pub fn focus_next(&mut self) {
-        let prev_id = self.tree.focus;
-        self.tree.focus_next();
-        let id = self.tree.focus;
-
-        // if leaving the view: mode should reset and the cursor should be
-        // within view
-        if prev_id != id {
-            self.mode = Mode::Normal;
-            self.ensure_cursor_in_view(id);
-        }
-
-        let view = view!(self, id);
-        let doc = doc_mut!(self, &view.doc);
-        doc.mark_as_focused();
+        self.focus(self.tree.next());
     }
 
     pub fn focus_direction(&mut self, direction: tree::Direction) {
@@ -1319,7 +1349,7 @@ impl Editor {
             .primary()
             .cursor(doc.text().slice(..));
         if let Some(mut pos) = view.screen_coords_at_pos(doc, doc.text().slice(..), cursor) {
-            let inner = view.inner_area();
+            let inner = view.inner_area(doc);
             pos.col += inner.x as usize;
             pos.row += inner.y as usize;
             let cursorkind = config.cursor_shape.from_mode(self.mode);
@@ -1348,24 +1378,39 @@ impl Editor {
     }
 
     pub async fn wait_event(&mut self) -> EditorEvent {
-        tokio::select! {
-            biased;
+        // the loop only runs once or twice and would be better implemented with a recursion + const generic
+        // however due to limitations with async functions that can not be implemented right now
+        loop {
+            tokio::select! {
+                biased;
 
-            Some(event) = self.save_queue.next() => {
-                self.write_count -= 1;
-                EditorEvent::DocumentSaved(event)
-            }
-            Some(config_event) = self.config_events.1.recv() => {
-                EditorEvent::ConfigEvent(config_event)
-            }
-            Some(message) = self.language_servers.incoming.next() => {
-                EditorEvent::LanguageServerMessage(message)
-            }
-            Some(event) = self.debugger_events.next() => {
-                EditorEvent::DebuggerEvent(event)
-            }
-            _ = &mut self.idle_timer => {
-                EditorEvent::IdleTimer
+                Some(event) = self.save_queue.next() => {
+                    self.write_count -= 1;
+                    return EditorEvent::DocumentSaved(event)
+                }
+                Some(config_event) = self.config_events.1.recv() => {
+                    return EditorEvent::ConfigEvent(config_event)
+                }
+                Some(message) = self.language_servers.incoming.next() => {
+                    return EditorEvent::LanguageServerMessage(message)
+                }
+                Some(event) = self.debugger_events.next() => {
+                    return EditorEvent::DebuggerEvent(event)
+                }
+
+                _ = self.redraw_handle.0.notified() => {
+                    if  !self.needs_redraw{
+                        self.needs_redraw = true;
+                        let timeout = Instant::now() + Duration::from_millis(96);
+                        if timeout < self.idle_timer.deadline(){
+                            self.idle_timer.as_mut().reset(timeout)
+                        }
+                    }
+                }
+
+                _ = &mut self.idle_timer  => {
+                    return EditorEvent::IdleTimer
+                }
             }
         }
     }
