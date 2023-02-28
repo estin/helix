@@ -1,3 +1,8 @@
+Helix with
+ - mru https://github.com/helix-editor/helix/pull/2980
+ - completion https://github.com/helix-editor/helix/pull/3328
+ - lsp hints https://github.com/helix-editor/helix/pull/5934
+
 <div align="center">
 
 <h1>
