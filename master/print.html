@@ -239,7 +239,9 @@ sudo dnf install helix
 <p>Additionally, a <a href="https://aur.archlinux.org/packages/helix-git/">helix-git</a> package is available
 in the AUR, which builds the master branch.</p>
 <h3 id="nixos"><a class="header" href="#nixos">NixOS</a></h3>
-<p>Helix is available as a <a href="https://nixos.wiki/wiki/Flakes">flake</a> in the project
+<p>Helix is available in <a href="https://github.com/nixos/nixpkgs">nixpkgs</a> through the <code>helix</code> attribute,
+the unstable channel usually carries the latest release.</p>
+<p>Helix is also available as a <a href="https://nixos.wiki/wiki/Flakes">flake</a> in the project
 root. Use <code>nix develop</code> to spin up a reproducible development shell. Outputs are
 cached for each push to master using <a href="https://www.cachix.org/">Cachix</a>. The
 flake is configured to automatically make use of this cache assuming the user
@@ -316,8 +318,9 @@ the <code>runtime</code> directory within the user's helix config directory (mor
 <pre><code class="language-sh">HELIX_RUNTIME=/home/user-name/src/helix/runtime
 </code></pre>
 <p>Or, create a symlink in <code>~/.config/helix</code> that links to the source code directory:</p>
-<pre><code class="language-sh">ln -s $PWD/runtime ~/.config/helix/runtime
+<pre><code class="language-sh">ln -Ts $PWD/runtime ~/.config/helix/runtime
 </code></pre>
+<p>If the above command fails to create a symbolic link because the file exists either move <code>~/.config/helix/runtime</code> to a new location or delete it, then run the symlink command above again. </p>
 <h4 id="windows-1"><a class="header" href="#windows-1">Windows</a></h4>
 <p>Either set the <code>HELIX_RUNTIME</code> environment variable to point to the runtime files using the Windows setting (search for
 <code>Edit environment variables for your account</code>) or use the <code>setx</code> command in
@@ -457,15 +460,15 @@ function or block of code.</p>
 <tr><td><code>(</code>, <code>[</code>, <code>'</code>, etc.</td><td>Specified surround pairs</td></tr>
 <tr><td><code>m</code></td><td>The closest surround pair</td></tr>
 <tr><td><code>f</code></td><td>Function</td></tr>
-<tr><td><code>c</code></td><td>Class</td></tr>
+<tr><td><code>t</code></td><td>Type (or Class)</td></tr>
 <tr><td><code>a</code></td><td>Argument/parameter</td></tr>
-<tr><td><code>o</code></td><td>Comment</td></tr>
-<tr><td><code>t</code></td><td>Test</td></tr>
+<tr><td><code>c</code></td><td>Comment</td></tr>
+<tr><td><code>T</code></td><td>Test</td></tr>
 <tr><td><code>g</code></td><td>Change</td></tr>
 </tbody></table>
 </div>
 <blockquote>
-<p>💡 <code>f</code>, <code>c</code>, etc. need a tree-sitter grammar active for the current
+<p>💡 <code>f</code>, <code>t</code>, etc. need a tree-sitter grammar active for the current
 document and a special tree-sitter query file to work properly. <a href="./lang-support.html">Only
 some grammars</a> currently have the query file implemented.
 Contributions are welcome!</p>
@@ -474,7 +477,7 @@ Contributions are welcome!</p>
 <p>Navigating between functions, classes, parameters, and other elements is
 possible using tree-sitter and textobject queries. For
 example to move to the next function use <code>]f</code>, to move to previous
-class use <code>[c</code>, and so on.</p>
+type use <code>[t</code>, and so on.</p>
 <p><img src="https://user-images.githubusercontent.com/23398472/152332550-7dfff043-36a2-4aec-b8f2-77c13eb56d6f.gif" alt="Tree-sitter-nav-demo" /></p>
 <p>For the full reference see the <a href="./keymap.html#unimpaired">unimpaired</a> section of the key bind
 documentation.</p>
@@ -1049,10 +1052,11 @@ Languages</a> guide for more language configuration information.</p>
 <tr><td>beancount</td><td>✓</td><td></td><td></td><td></td></tr>
 <tr><td>bibtex</td><td>✓</td><td></td><td></td><td><code>texlab</code></td></tr>
 <tr><td>bicep</td><td>✓</td><td></td><td></td><td><code>bicep-langserver</code></td></tr>
+<tr><td>blueprint</td><td>✓</td><td></td><td></td><td><code>blueprint-compiler</code></td></tr>
 <tr><td>c</td><td>✓</td><td>✓</td><td>✓</td><td><code>clangd</code></td></tr>
 <tr><td>c-sharp</td><td>✓</td><td>✓</td><td></td><td><code>OmniSharp</code></td></tr>
 <tr><td>cabal</td><td></td><td></td><td></td><td></td></tr>
-<tr><td>cairo</td><td>✓</td><td></td><td></td><td></td></tr>
+<tr><td>cairo</td><td>✓</td><td>✓</td><td>✓</td><td><code>cairo-language-server</code></td></tr>
 <tr><td>capnp</td><td>✓</td><td></td><td>✓</td><td></td></tr>
 <tr><td>clojure</td><td>✓</td><td></td><td></td><td><code>clojure-lsp</code></td></tr>
 <tr><td>cmake</td><td>✓</td><td>✓</td><td>✓</td><td><code>cmake-language-server</code></td></tr>
@@ -1082,6 +1086,7 @@ Languages</a> guide for more language configuration information.</p>
 <tr><td>erlang</td><td>✓</td><td>✓</td><td></td><td><code>erlang_ls</code></td></tr>
 <tr><td>esdl</td><td>✓</td><td></td><td></td><td></td></tr>
 <tr><td>fish</td><td>✓</td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td>forth</td><td>✓</td><td></td><td></td><td></td></tr>
 <tr><td>fortran</td><td>✓</td><td></td><td>✓</td><td><code>fortls</code></td></tr>
 <tr><td>gdscript</td><td>✓</td><td>✓</td><td>✓</td><td></td></tr>
 <tr><td>git-attributes</td><td>✓</td><td></td><td></td><td></td></tr>
@@ -1850,7 +1855,7 @@ berry = &quot;#2A2A4D&quot;
 <tr><td><code>ui.window</code></td><td>Borderlines separating splits</td></tr>
 <tr><td><code>ui.help</code></td><td>Description box for commands</td></tr>
 <tr><td><code>ui.text</code></td><td>Command prompts, popup text, etc.</td></tr>
-<tr><td><code>ui.text.focus</code></td><td></td></tr>
+<tr><td><code>ui.text.focus</code></td><td>The currently selected line in the picker</td></tr>
 <tr><td><code>ui.text.inactive</code></td><td>Same as <code>ui.text</code> but when the text is inactive (e.g. suggestions)</td></tr>
 <tr><td><code>ui.text.info</code></td><td>The key: command text in <code>ui.popup.info</code> boxes</td></tr>
 <tr><td><code>ui.virtual.ruler</code></td><td>Ruler columns (see the <a href="./configuration.html#editor-section"><code>editor.rulers</code> config</a>)</td></tr>
