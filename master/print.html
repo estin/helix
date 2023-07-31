@@ -451,17 +451,31 @@ example:</p>
 <li><code>&quot;hc</code> - Store the selection in register <code>h</code> and then change it (delete and enter insert mode).</li>
 <li><code>&quot;md</code> - Store the selection in register <code>m</code> and delete it.</li>
 </ul>
-<h3 id="special-registers"><a class="header" href="#special-registers">Special registers</a></h3>
+<h3 id="default-registers"><a class="header" href="#default-registers">Default registers</a></h3>
+<p>Commands that use registers, like yank (<code>y</code>), use a default register if none is specified.
+These registers are used as defaults:</p>
 <div class="table-wrapper"><table><thead><tr><th>Register character</th><th>Contains</th></tr></thead><tbody>
 <tr><td><code>/</code></td><td>Last search</td></tr>
 <tr><td><code>:</code></td><td>Last executed command</td></tr>
 <tr><td><code>&quot;</code></td><td>Last yanked text</td></tr>
-<tr><td><code>_</code></td><td>Black hole</td></tr>
+<tr><td><code>@</code></td><td>Last recorded macro</td></tr>
 </tbody></table>
 </div>
-<p>The system clipboard is not directly supported by a special register. Instead, special commands and keybindings are provided. Refer to the
-<a href="keymap.html#space-mode">key map</a> for more details.</p>
-<p>The black hole register is a no-op register, meaning that no data will be read or written to it.</p>
+<h3 id="special-registers"><a class="header" href="#special-registers">Special registers</a></h3>
+<p>Some registers have special behavior when read from and written to.</p>
+<div class="table-wrapper"><table><thead><tr><th>Register character</th><th>When read</th><th>When written</th></tr></thead><tbody>
+<tr><td><code>_</code></td><td>No values are returned</td><td>All values are discarded</td></tr>
+<tr><td><code>#</code></td><td>Selection indices (first selection is <code>1</code>, second is <code>2</code>, etc.)</td><td>This register is not writable</td></tr>
+<tr><td><code>.</code></td><td>Contents of the current selections</td><td>This register is not writable</td></tr>
+<tr><td><code>%</code></td><td>Name of the current file</td><td>This register is not writable</td></tr>
+<tr><td><code>*</code></td><td>Reads from the system clipboard</td><td>Joins and yanks to the system clipboard</td></tr>
+<tr><td><code>+</code></td><td>Reads from the primary clipboard</td><td>Joins and yanks to the primary clipboard</td></tr>
+</tbody></table>
+</div>
+<p>When yanking multiple selections to the clipboard registers, the selections
+are joined with newlines. Pasting from these registers will paste multiple
+selections if the clipboard was last yanked to by the Helix session. Otherwise
+the clipboard contents are pasted as one selection.</p>
 <h2 id="surround"><a class="header" href="#surround">Surround</a></h2>
 <p>Helix includes built-in functionality similar to <a href="https://github.com/tpope/vim-surround">vim-surround</a>.
 The keymappings have been inspired from <a href="https://github.com/machakann/vim-sandwich">vim-sandwich</a>:</p>
@@ -850,7 +864,7 @@ useful when you're simply looking over text and not actively editing it.</p>
 <tr><td><code>w</code></td><td>Enter <a href="keymap.html#window-mode">window mode</a></td><td>N/A</td></tr>
 <tr><td><code>p</code></td><td>Paste system clipboard after selections</td><td><code>paste_clipboard_after</code></td></tr>
 <tr><td><code>P</code></td><td>Paste system clipboard before selections</td><td><code>paste_clipboard_before</code></td></tr>
-<tr><td><code>y</code></td><td>Join and yank selections to clipboard</td><td><code>yank_joined_to_clipboard</code></td></tr>
+<tr><td><code>y</code></td><td>Yank selections to clipboard</td><td><code>yank_to_clipboard</code></td></tr>
 <tr><td><code>Y</code></td><td>Yank main selection to clipboard</td><td><code>yank_main_selection_to_clipboard</code></td></tr>
 <tr><td><code>R</code></td><td>Replace selections by clipboard contents</td><td><code>replace_selections_with_clipboard</code></td></tr>
 <tr><td><code>/</code></td><td>Global search in workspace folder</td><td><code>global_search</code></td></tr>
@@ -1245,7 +1259,7 @@ Languages</a> guide for more language configuration information.</p>
 <tr><td>typescript</td><td>✓</td><td>✓</td><td>✓</td><td><code>typescript-language-server</code></td></tr>
 <tr><td>ungrammar</td><td>✓</td><td></td><td></td><td></td></tr>
 <tr><td>uxntal</td><td>✓</td><td></td><td></td><td></td></tr>
-<tr><td>v</td><td>✓</td><td>✓</td><td>✓</td><td><code>v</code></td></tr>
+<tr><td>v</td><td>✓</td><td>✓</td><td>✓</td><td><code>v-analyzer</code></td></tr>
 <tr><td>vala</td><td>✓</td><td></td><td></td><td><code>vala-language-server</code></td></tr>
 <tr><td>verilog</td><td>✓</td><td>✓</td><td></td><td><code>svlangserver</code></td></tr>
 <tr><td>vhdl</td><td>✓</td><td></td><td></td><td><code>vhdl_ls</code></td></tr>
@@ -1256,6 +1270,7 @@ Languages</a> guide for more language configuration information.</p>
 <tr><td>webc</td><td>✓</td><td></td><td></td><td></td></tr>
 <tr><td>wgsl</td><td>✓</td><td></td><td></td><td><code>wgsl_analyzer</code></td></tr>
 <tr><td>wit</td><td>✓</td><td></td><td>✓</td><td></td></tr>
+<tr><td>wren</td><td>✓</td><td>✓</td><td></td><td></td></tr>
 <tr><td>xit</td><td>✓</td><td></td><td></td><td></td></tr>
 <tr><td>xml</td><td>✓</td><td></td><td>✓</td><td></td></tr>
 <tr><td>yaml</td><td>✓</td><td></td><td>✓</td><td><code>yaml-language-server</code></td></tr>
@@ -1349,9 +1364,9 @@ mode.select = &quot;SELECT&quot;
 </code></pre>
 <p>The <code>[editor.statusline]</code> key takes the following sub-keys:</p>
 <div class="table-wrapper"><table><thead><tr><th>Key</th><th>Description</th><th>Default</th></tr></thead><tbody>
-<tr><td><code>left</code></td><td>A list of elements aligned to the left of the statusline</td><td><code>[&quot;mode&quot;, &quot;spinner&quot;, &quot;file-name&quot;]</code></td></tr>
+<tr><td><code>left</code></td><td>A list of elements aligned to the left of the statusline</td><td><code>[&quot;mode&quot;, &quot;spinner&quot;, &quot;file-name&quot;, &quot;file-modification-indicator&quot;]</code></td></tr>
 <tr><td><code>center</code></td><td>A list of elements aligned to the middle of the statusline</td><td><code>[]</code></td></tr>
-<tr><td><code>right</code></td><td>A list of elements aligned to the right of the statusline</td><td><code>[&quot;diagnostics&quot;, &quot;selections&quot;, &quot;position&quot;, &quot;file-encoding&quot;]</code></td></tr>
+<tr><td><code>right</code></td><td>A list of elements aligned to the right of the statusline</td><td><code>[&quot;diagnostics&quot;, &quot;selections&quot;, &quot;register&quot;, &quot;position&quot;, &quot;file-encoding&quot;]</code></td></tr>
 <tr><td><code>separator</code></td><td>The character used to separate elements in the statusline</td><td><code>&quot;│&quot;</code></td></tr>
 <tr><td><code>mode.normal</code></td><td>The text shown in the <code>mode</code> element for normal mode</td><td><code>&quot;NOR&quot;</code></td></tr>
 <tr><td><code>mode.insert</code></td><td>The text shown in the <code>mode</code> element for insert mode</td><td><code>&quot;INS&quot;</code></td></tr>
